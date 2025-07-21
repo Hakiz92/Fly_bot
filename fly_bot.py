@@ -1,4 +1,5 @@
 import discord
+import json
 from discord import app_commands
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -12,8 +13,11 @@ SPREADSHEET_ID = "1BMfeBceFx9wRDHvuyYyzcRb03aJNrBbRqCEYPG-0QBw"
 LINK_SHEET = "https://docs.google.com/spreadsheets/d/1BMfeBceFx9wRDHvuyYyzcRb03aJNrBbRqCEYPG-0QBw/edit?gid=1348196106#gid=1348196106"
 # ------------ GOOGLE SHEET -----------------
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
-CREDS = service_account.Credentials.from_service_account_file(
-    'credentials.json', scopes=SCOPES)
+GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS")
+
+CREDS = service_account.Credentials.from_service_account_info(
+    json.loads(GOOGLE_CREDENTIALS_JSON), scopes=SCOPES
+)
 service = build('sheets', 'v4', credentials=CREDS)
 
 
