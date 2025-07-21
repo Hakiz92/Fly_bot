@@ -4,9 +4,10 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from datetime import datetime, timezone, timedelta
 import os
-
+from dotenv import load_dotenv
 # ------------ ENVIRONMENT -----------------
-TOKEN = "MTM5NjQxMTc0Nzk0MTg3NTc2Mg.Giinvv.pHrH-zLEo3aXDd8aPaJRH1r6FWKbwuP9nvZINU"
+load_dotenv()
+TOKEN = os.getenv("DISCORD_TOKEN")
 SPREADSHEET_ID = "1BMfeBceFx9wRDHvuyYyzcRb03aJNrBbRqCEYPG-0QBw"
 LINK_SHEET = "https://docs.google.com/spreadsheets/d/1BMfeBceFx9wRDHvuyYyzcRb03aJNrBbRqCEYPG-0QBw/edit?gid=1348196106#gid=1348196106"
 # ------------ GOOGLE SHEET -----------------
