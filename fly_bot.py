@@ -3,17 +3,22 @@ import json
 from discord import app_commands
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
+
 # ------------ ENVIRONMENT -----------------
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 SPREADSHEET_ID = "1BMfeBceFx9wRDHvuyYyzcRb03aJNrBbRqCEYPG-0QBw"
 LINK_SHEET = "https://docs.google.com/spreadsheets/d/1BMfeBceFx9wRDHvuyYyzcRb03aJNrBbRqCEYPG-0QBw/edit?gid=1348196106#gid=1348196106"
+
 # ------------ GOOGLE SHEET -----------------
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS")
+
+if not GOOGLE_CREDENTIALS_JSON:
+    raise ValueError("Biến môi trường GOOGLE_CREDENTIALS bị thiếu.")
 
 CREDS = service_account.Credentials.from_service_account_info(
     json.loads(GOOGLE_CREDENTIALS_JSON), scopes=SCOPES
@@ -23,19 +28,22 @@ service = build('sheets', 'v4', credentials=CREDS)
 
 def append_to_sheet(sheet_name, values):
     body = {"values": [values]}
-    service.spreadsheets().values().append(spreadsheetId=SPREADSHEET_ID,
-                                           range=f"{sheet_name}!A1",
-                                           valueInputOption="USER_ENTERED",
-                                           insertDataOption="INSERT_ROWS",
-                                           body=body).execute()
+    service.spreadsheets().values().append(
+        spreadsheetId=SPREADSHEET_ID,
+        range=f"{sheet_name}!A1",
+        valueInputOption="USER_ENTERED",
+        insertDataOption="INSERT_ROWS",
+        body=body
+    ).execute()
 
 
 # ------------ TIMEZONE VN -----------------
-VN_TZ = timezone(timedelta(hours=7))
+VN_OFFSET = timedelta(hours=7)
 
 
 def get_vietnam_time():
-    return datetime.now(VN_TZ).strftime("%H:%M")
+    now = datetime.utcnow() + VN_OFFSET
+    return now.strftime("%H:%M")
 
 
 # ------------ DISCORD SETUP -----------------
@@ -57,17 +65,13 @@ async def has_pilot_role(interaction: discord.Interaction):
 
 
 # ------------ KÉO MAN -----------------
-@tree.command(name="keo-man",
-              description="Ghi chú Kéo Man Rợ (ngày + số lượng)")
-@app_commands.describe(ngay="Ngày (VD: 20/7/2025)",
-                       so_luong="Số lượng man rợ đã kéo")
+@tree.command(name="keo-man", description="Ghi chú Kéo Man Rợ (ngày + số lượng)")
+@app_commands.describe(ngay="Ngày (VD: 20/7/2025)", so_luong="Số lượng man rợ đã kéo")
 async def keo_man(interaction: discord.Interaction, ngay: str, so_luong: int):
     if not await has_pilot_role(interaction):
-        await interaction.response.send_message(
-            "❌ Bạn cần role **Pilot** để dùng lệnh này.", ephemeral=True)
+        await interaction.response.send_message("❌ Bạn cần role **Pilot** để dùng lệnh này.", ephemeral=True)
         return
-    await interaction.response.send_message(
-        "Gửi ảnh chuỗi man rợ, nhắn `done` khi xong.")
+    await interaction.response.send_message("Gửi ảnh chuỗi man rợ, nhắn `done` khi xong.")
     user_tasks[interaction.user.id] = {
         "sheet": "Kéo man",
         "ngay": ngay,
@@ -78,24 +82,16 @@ async def keo_man(interaction: discord.Interaction, ngay: str, so_luong: int):
 
 
 # ------------ WAR GIỜ -----------------
-@tree.command(name="war-gio",
-              description="Ghi chú WAR kiểu Giờ (ngày + giờ + phút)")
-@app_commands.describe(ngay="Ngày (VD: 20/7/2025)",
-                       gio="Số giờ tham gia",
-                       phut="Số phút tham gia")
-async def war_gio(interaction: discord.Interaction, ngay: str, gio: int,
-                  phut: int):
+@tree.command(name="war-gio", description="Ghi chú WAR kiểu Giờ (ngày + giờ + phút)")
+@app_commands.describe(ngay="Ngày (VD: 20/7/2025)", gio="Số giờ tham gia", phut="Số phút tham gia")
+async def war_gio(interaction: discord.Interaction, ngay: str, gio: int, phut: int):
     if not await has_pilot_role(interaction):
-        await interaction.response.send_message(
-            "❌ Bạn cần role **Pilot** để dùng lệnh này.", ephemeral=True)
+        await interaction.response.send_message("❌ Bạn cần role **Pilot** để dùng lệnh này.", ephemeral=True)
         return
     if gio < 0 or phut < 0 or (gio == 0 and phut == 0):
-        await interaction.response.send_message(
-            "❌ Phải nhập giờ hoặc phút > 0.", ephemeral=True)
+        await interaction.response.send_message("❌ Phải nhập giờ hoặc phút > 0.", ephemeral=True)
         return
-    await interaction.response.send_message(
-        "Gửi ảnh KP ban đầu, KP lúc hoàn thành, Kill và Heal trước sau, nhắn `done` khi xong."
-    )
+    await interaction.response.send_message("Gửi ảnh KP ban đầu, KP lúc hoàn thành, Kill và Heal trước sau, nhắn `done` khi xong.")
     so_luong = f"{gio}h{phut}p"
     user_tasks[interaction.user.id] = {
         "sheet": "War - Giờ",
@@ -107,22 +103,16 @@ async def war_gio(interaction: discord.Interaction, ngay: str, gio: int,
 
 
 # ------------ WAR KP -----------------
-@tree.command(name="war-kp",
-              description="Ghi chú WAR kiểu KP (ngày + KP 200m, 1b,...)")
-@app_commands.describe(ngay="Ngày (VD: 20/7/2025)",
-                       kp="Số KP (VD: 200m, 2b, 1.5b)")
+@tree.command(name="war-kp", description="Ghi chú WAR kiểu KP (ngày + KP 200m, 1b,...)")
+@app_commands.describe(ngay="Ngày (VD: 20/7/2025)", kp="Số KP (VD: 200m, 2b, 1.5b)")
 async def war_kp(interaction: discord.Interaction, ngay: str, kp: str):
     if not await has_pilot_role(interaction):
-        await interaction.response.send_message(
-            "❌ Bạn cần role **Pilot** để dùng lệnh này.", ephemeral=True)
+        await interaction.response.send_message("❌ Bạn cần role **Pilot** để dùng lệnh này.", ephemeral=True)
         return
     if not kp.lower().endswith(("m", "b")):
-        await interaction.response.send_message(
-            "❌ KP phải có 'm' hoặc 'b' (VD: 200m, 2b).", ephemeral=True)
+        await interaction.response.send_message("❌ KP phải có 'm' hoặc 'b' (VD: 200m, 2b).", ephemeral=True)
         return
-    await interaction.response.send_message(
-        "Gửi ảnh KP ban đầu, KP lúc hoàn thành, Kill và Heal trước sau, nhắn `done` khi xong."
-    )
+    await interaction.response.send_message("Gửi ảnh KP ban đầu, KP lúc hoàn thành, Kill và Heal trước sau, nhắn `done` khi xong.")
     user_tasks[interaction.user.id] = {
         "sheet": "War - KP",
         "ngay": ngay,
@@ -134,32 +124,21 @@ async def war_kp(interaction: discord.Interaction, ngay: str, kp: str):
 
 # ------------ BỆ THỜ -----------------
 @tree.command(name="be-tho", description="Ghi chú Bệ Thờ (ngày + giờ + phút)")
-@app_commands.describe(ngay="Ngày (VD: 20/7/2025)",
-                       gio="Giờ (>= 0)",
-                       phut="Phút (>= 0)")
-async def be_tho(interaction: discord.Interaction,
-                 ngay: str,
-                 gio: int = 0,
-                 phut: int = 0):
+@app_commands.describe(ngay="Ngày (VD: 20/7/2025)", gio="Giờ (>= 0)", phut="Phút (>= 0)")
+async def be_tho(interaction: discord.Interaction, ngay: str, gio: int = 0, phut: int = 0):
     if not await has_pilot_role(interaction):
-        await interaction.response.send_message(
-            "❌ Bạn cần role **Pilot** để dùng lệnh này.", ephemeral=True)
+        await interaction.response.send_message("❌ Bạn cần role **Pilot** để dùng lệnh này.", ephemeral=True)
         return
     if gio < 0 or phut < 0:
-        await interaction.response.send_message("❌ Giờ và phút không được âm.",
-                                                ephemeral=True)
+        await interaction.response.send_message("❌ Giờ và phút không được âm.", ephemeral=True)
         return
     if gio == 0 and phut == 0:
-        await interaction.response.send_message(
-            "❌ Phải nhập giờ hoặc phút > 0.", ephemeral=True)
+        await interaction.response.send_message("❌ Phải nhập giờ hoặc phút > 0.", ephemeral=True)
         return
 
     await interaction.response.defer()
     time_str = get_vietnam_time()
-    append_to_sheet("Bệ thờ", [
-        ngay, interaction.user.name, gio, phut, f"#{interaction.channel.name}",
-        time_str
-    ])
+    append_to_sheet("Bệ thờ", [ngay, interaction.user.name, gio, phut, f"#{interaction.channel.name}", time_str])
     await interaction.followup.send("✅ Đã ghi nhận Bệ Thờ!")
 
 
@@ -168,14 +147,11 @@ async def be_tho(interaction: discord.Interaction,
 @app_commands.describe(ngay="Ngày (VD: 20/7/2025)")
 async def ark(interaction: discord.Interaction, ngay: str):
     if not await has_pilot_role(interaction):
-        await interaction.response.send_message(
-            "❌ Bạn cần role **Pilot** để dùng lệnh này.", ephemeral=True)
+        await interaction.response.send_message("❌ Bạn cần role **Pilot** để dùng lệnh này.", ephemeral=True)
         return
     await interaction.response.defer()
     time_str = get_vietnam_time()
-    append_to_sheet("Ark", [
-        ngay, interaction.user.name, f"#{interaction.channel.name}", time_str
-    ])
+    append_to_sheet("Ark", [ngay, interaction.user.name, f"#{interaction.channel.name}", time_str])
     await interaction.followup.send("✅ Đã ghi nhận Ark!")
 
 
@@ -183,11 +159,9 @@ async def ark(interaction: discord.Interaction, ngay: str):
 @tree.command(name="xem-sheet", description="Xem link Google Sheet")
 async def xem_sheet(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.manage_guild:
-        await interaction.response.send_message(
-            "❌ Bạn không đủ quyền để xem Google Sheet này.", ephemeral=True)
+        await interaction.response.send_message("❌ Bạn không đủ quyền để xem Google Sheet này.", ephemeral=True)
         return
-    await interaction.response.send_message(f"📄 Link tổng hợp: {LINK_SHEET}",
-                                            ephemeral=True)
+    await interaction.response.send_message(f"📄 Link tổng hợp: {LINK_SHEET}", ephemeral=True)
 
 
 # ------------ NHẬN ẢNH + DONE -----------------
@@ -199,23 +173,14 @@ async def on_message(message):
     user_id = message.author.id
     if user_id in user_tasks:
         task = user_tasks[user_id]
-
         if message.channel != task["channel"]:
             return
 
         if message.content.strip().lower() == "done":
-            links = [
-                f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{msg.id}"
-                for msg in task["images"]
-            ]
+            links = [f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{msg.id}" for msg in task["images"]]
             time_str = get_vietnam_time()
-            append_to_sheet(task["sheet"], [
-                task["ngay"], message.author.name, task["so_luong"],
-                f"#{message.channel.name}",
-                ", ".join(links) if links else "Không gửi ảnh", time_str
-            ])
-            await message.channel.send(
-                "✅ Đã ghi nhận xong và lưu vào Google Sheet.")
+            append_to_sheet(task["sheet"], [task["ngay"], message.author.name, task["so_luong"], f"#{message.channel.name}", ", ".join(links) if links else "Không gửi ảnh", time_str])
+            await message.channel.send("✅ Đã ghi nhận xong và lưu vào Google Sheet.")
             del user_tasks[user_id]
             return
 
@@ -232,7 +197,6 @@ async def on_ready():
 
 # ------------ KEEP ALIVE -----------------
 from keep_alive import keep_alive
-
 keep_alive()
 
 client.run(TOKEN)
