@@ -25,7 +25,6 @@ CREDS = service_account.Credentials.from_service_account_info(
 )
 service = build('sheets', 'v4', credentials=CREDS)
 
-
 def append_to_sheet(sheet_name, values):
     body = {"values": [values]}
     service.spreadsheets().values().append(
@@ -36,15 +35,12 @@ def append_to_sheet(sheet_name, values):
         body=body
     ).execute()
 
-
 # ------------ TIMEZONE VN -----------------
 VN_OFFSET = timedelta(hours=7)
 
-
 def get_vietnam_time():
     now = datetime.utcnow() + VN_OFFSET
-    return now.strftime("%H:%M")
-
+    return now.strftime("%H:%M:%S")  # Ghi nhận theo giây thật
 
 # ------------ DISCORD SETUP -----------------
 intents = discord.Intents.default()
@@ -55,14 +51,12 @@ intents.members = True
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
-user_tasks = {}  # user_id: {sheet, ngày, số_lượng, images[], channel}
-
+user_tasks = {}  # user_id: {sheet, ngày, số_lượng, images[], channel, timestamp}
 
 # ------------ ROLE CHECK -----------------
 async def has_pilot_role(interaction: discord.Interaction):
     member = await interaction.guild.fetch_member(interaction.user.id)
     return any(role.name.lower() == 'pilot' for role in member.roles)
-
 
 # ------------ KÉO MAN -----------------
 @tree.command(name="keo-man", description="Ghi chú Kéo Man Rợ (ngày + số lượng)")
@@ -77,11 +71,11 @@ async def keo_man(interaction: discord.Interaction, ngay: str, so_luong: int):
         "ngay": ngay,
         "so_luong": so_luong,
         "images": [],
-        "channel": interaction.channel
+        "channel": interaction.channel,
+        "timestamp": datetime.utcnow() + VN_OFFSET
     }
 
-
-# ------------ WAR GIỜ -----------------
+# ------------ WAR GIỬ -----------------
 @tree.command(name="war-gio", description="Ghi chú WAR kiểu Giờ (ngày + giờ + phút)")
 @app_commands.describe(ngay="Ngày (VD: 20/7/2025)", gio="Số giờ tham gia", phut="Số phút tham gia")
 async def war_gio(interaction: discord.Interaction, ngay: str, gio: int, phut: int):
@@ -98,9 +92,9 @@ async def war_gio(interaction: discord.Interaction, ngay: str, gio: int, phut: i
         "ngay": ngay,
         "so_luong": so_luong,
         "images": [],
-        "channel": interaction.channel
+        "channel": interaction.channel,
+        "timestamp": datetime.utcnow() + VN_OFFSET
     }
-
 
 # ------------ WAR KP -----------------
 @tree.command(name="war-kp", description="Ghi chú WAR kiểu KP (ngày + KP 200m, 1b,...)")
@@ -118,9 +112,9 @@ async def war_kp(interaction: discord.Interaction, ngay: str, kp: str):
         "ngay": ngay,
         "so_luong": kp,
         "images": [],
-        "channel": interaction.channel
+        "channel": interaction.channel,
+        "timestamp": datetime.utcnow() + VN_OFFSET
     }
-
 
 # ------------ BỆ THỜ -----------------
 @tree.command(name="be-tho", description="Ghi chú Bệ Thờ (ngày + giờ + phút)")
@@ -135,12 +129,10 @@ async def be_tho(interaction: discord.Interaction, ngay: str, gio: int = 0, phut
     if gio == 0 and phut == 0:
         await interaction.response.send_message("❌ Phải nhập giờ hoặc phút > 0.", ephemeral=True)
         return
-
     await interaction.response.defer()
     time_str = get_vietnam_time()
     append_to_sheet("Bệ thờ", [ngay, interaction.user.name, gio, phut, f"#{interaction.channel.name}", time_str])
     await interaction.followup.send("✅ Đã ghi nhận Bệ Thờ!")
-
 
 # ------------ ARK -----------------
 @tree.command(name="ark", description="Ghi chú Ark (chỉ cần ngày)")
@@ -154,7 +146,6 @@ async def ark(interaction: discord.Interaction, ngay: str):
     append_to_sheet("Ark", [ngay, interaction.user.name, f"#{interaction.channel.name}", time_str])
     await interaction.followup.send("✅ Đã ghi nhận Ark!")
 
-
 # ------------ XEM SHEET -----------------
 @tree.command(name="xem-sheet", description="Xem link Google Sheet")
 async def xem_sheet(interaction: discord.Interaction):
@@ -163,37 +154,31 @@ async def xem_sheet(interaction: discord.Interaction):
         return
     await interaction.response.send_message(f"📄 Link tổng hợp: {LINK_SHEET}", ephemeral=True)
 
-
 # ------------ NHẬN ẢNH + DONE -----------------
 @client.event
 async def on_message(message):
     if message.author.bot:
         return
-
     user_id = message.author.id
     if user_id in user_tasks:
         task = user_tasks[user_id]
         if message.channel != task["channel"]:
             return
-
         if message.content.strip().lower() == "done":
             links = [f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{msg.id}" for msg in task["images"]]
-            time_str = get_vietnam_time()
+            time_str = task["timestamp"].strftime("%H:%M:%S")
             append_to_sheet(task["sheet"], [task["ngay"], message.author.name, task["so_luong"], f"#{message.channel.name}", ", ".join(links) if links else "Không gửi ảnh", time_str])
             await message.channel.send("✅ Đã ghi nhận xong và lưu vào Google Sheet.")
             del user_tasks[user_id]
             return
-
         if message.attachments:
             task["images"].append(message)
-
 
 # ------------ READY -----------------
 @client.event
 async def on_ready():
     await tree.sync()
     print(f"{client.user} is ready!")
-
 
 # ------------ KEEP ALIVE -----------------
 from keep_alive import keep_alive
